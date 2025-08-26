@@ -108,8 +108,8 @@ function getWindDirection(deg) {
   return dirs[Math.round(deg / 22.5) % 16];
 }
 
-// ===== Fixed Location: Green Valley, AZ =====
-const FIXED_LOCATION = { lat: 31.8554, lon: -111.0007 };
+// ===== Fixed Location: St Charles, IL =====
+const FIXED_LOCATION = { lat: 41.913, lon: -88.3108 };
 
 // ===== Fetch from NWS
 function parseISODurationToHours(dur) {
@@ -124,59 +124,70 @@ function parseISODurationToHours(dur) {
 
 async function fetchWeatherData(lat, lon) {
   const corsProxy = 'https://corsproxy.io/?';
-  const pointsUrl = corsProxy + encodeURIComponent('https://api.weather.gov/points/' + lat + ',' + lon);
-  const pointsResp = await fetch(pointsUrl);
-  const points = await pointsResp.json();
-
-  const office = points.properties.gridId;
-  const gridX = points.properties.gridX;
-  const gridY = points.properties.gridY;
-  const forecastHourlyUrl = points.properties.forecastHourly;
-  const forecastGridDataUrl = points.properties.forecastGridData;
-
-  const stationsUrl = corsProxy + encodeURIComponent('https://api.weather.gov/gridpoints/' + office + '/' + gridX + ',' + gridY + '/stations');
-  const stationsResp = await fetch(stationsUrl);
-  const stations = await stationsResp.json();
-  const stationUrl = stations.features[0].id;
-
-  const currentUrl = corsProxy + encodeURIComponent(stationUrl + '/observations/latest');
-  const currentResp = await fetch(currentUrl);
-  const current = await currentResp.json();
-
-  const hourlyResp = await fetch(corsProxy + encodeURIComponent(forecastHourlyUrl));
-  const hourly = await hourlyResp.json();
-
-  let dewpointByHour = {};
   try {
-    const gridResp = await fetch(corsProxy + encodeURIComponent(forecastGridDataUrl));
-    const grid = await gridResp.json();
-    const dewVals = grid?.properties?.dewpoint?.values || [];
-    dewVals.forEach(v => {
-      const valid = v.validTime || '';
-      const [startStr, durStr] = valid.split('/');
-      if (!startStr) return;
-      const start = new Date(startStr);
-      const hours = parseISODurationToHours(durStr) || 1;
-      for (let h = 0; h < hours; h++) {
-        const t = new Date(start.getTime() + h * 3600000);
-        const key = t.toISOString().slice(0,13); // YYYY-MM-DDTHH
-        const valF = convertCtoF(v.value);
-        if (valF != null) dewpointByHour[key] = valF;
-      }
-    });
-  } catch (e) { console.warn('Dewpoint grid fetch failed', e); }
+    const pointsUrl = corsProxy + encodeURIComponent('https://api.weather.gov/points/' + lat + ',' + lon);
+    const pointsResp = await fetch(pointsUrl);
+    if (!pointsResp.ok) throw new Error('Failed to fetch NWS points');
+    const points = await pointsResp.json();
 
-  const alertsUrl = corsProxy + encodeURIComponent('https://api.weather.gov/alerts/active?point=' + lat + ',' + lon);
-  const alertsResp = await fetch(alertsUrl);
-  const alerts = await alertsResp.json();
+    const office = points.properties.gridId;
+    const gridX = points.properties.gridX;
+    const gridY = points.properties.gridY;
+    const forecastHourlyUrl = points.properties.forecastHourly;
+    const forecastGridDataUrl = points.properties.forecastGridData;
 
-  return {
-    observation: current.properties,
-    station: stations.features[0].properties.name,
-    hourly: hourly?.properties?.periods || [],
-    alerts: alerts?.features || [],
-    dewpointByHour
-  };
+    const stationsUrl = corsProxy + encodeURIComponent('https://api.weather.gov/gridpoints/' + office + '/' + gridX + ',' + gridY + '/stations');
+    const stationsResp = await fetch(stationsUrl);
+    if (!stationsResp.ok) throw new Error('Failed to fetch stations');
+    const stations = await stationsResp.json();
+    const stationUrl = stations.features[0].id;
+
+    const currentUrl = corsProxy + encodeURIComponent(stationUrl + '/observations/latest');
+    const currentResp = await fetch(currentUrl);
+    if (!currentResp.ok) throw new Error('Failed to fetch current observation');
+    const current = await currentResp.json();
+
+    const hourlyResp = await fetch(corsProxy + encodeURIComponent(forecastHourlyUrl));
+    if (!hourlyResp.ok) throw new Error('Failed to fetch hourly forecast');
+    const hourly = await hourlyResp.json();
+
+    let dewpointByHour = {};
+    try {
+      const gridResp = await fetch(corsProxy + encodeURIComponent(forecastGridDataUrl));
+      if (!gridResp.ok) throw new Error('Failed to fetch grid data');
+      const grid = await gridResp.json();
+      const dewVals = grid?.properties?.dewpoint?.values || [];
+      dewVals.forEach(v => {
+        const valid = v.validTime || '';
+        const [startStr, durStr] = valid.split('/');
+        if (!startStr) return;
+        const start = new Date(startStr);
+        const hours = parseISODurationToHours(durStr) || 1;
+        for (let h = 0; h < hours; h++) {
+          const t = new Date(start.getTime() + h * 3600000);
+          const key = t.toISOString().slice(0,13); // YYYY-MM-DDTHH
+          const valF = convertCtoF(v.value);
+          if (valF != null) dewpointByHour[key] = valF;
+        }
+      });
+    } catch (e) { console.warn('Dewpoint grid fetch failed', e); }
+
+    const alertsUrl = corsProxy + encodeURIComponent('https://api.weather.gov/alerts/active?point=' + lat + ',' + lon);
+    const alertsResp = await fetch(alertsUrl);
+    if (!alertsResp.ok) throw new Error('Failed to fetch alerts');
+    const alerts = await alertsResp.json();
+
+    return {
+      observation: current.properties,
+      station: stations.features[0].properties.name,
+      hourly: hourly?.properties?.periods || [],
+      alerts: alerts?.features || [],
+      dewpointByHour
+    };
+  } catch (error) {
+    console.error('Weather data fetch error:', error);
+    throw error;
+  }
 }
 
 // ===== Chart utilities: responsive crisp canvas
