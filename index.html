@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Green Valley, Arizona Weather</title>
+  <meta name="theme-color" content="#1f3fcf">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #ca896b 0%, #a74605 100%);
+      min-height: 100vh; padding: 20px; color: #333;
+    }
+    .container { max-width: 1200px; margin: 0 auto; background: rgba(245,245,245,0.95);
+      border-radius: 20px; padding: 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.12); backdrop-filter: blur(10px); }
+    .header { text-align: center; margin-bottom: 24px; }
+    .app-title { font-size: 28px; font-weight: 700; color: #03663e; margin-bottom: 6px; }
+    .timestamp { font-size: 16px; color: #6b7280; margin-bottom: 4px; }
+    .station { font-size: 14px; color: #9ca3af; font-style: italic; }
+    .main-content { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+    .card { background: rgba(255,255,255,0.55); border-radius: 16px; padding: 20px; }
+    .current-card { display: flex; flex-direction: column; }
+    .temp-main { text-align: center; margin: 6px 0 10px 0; }
+    .temperature { font-size: 55px; font-weight: 700; color: #0b121b; line-height: 1; }
+    .temp-unit { font-size: 22px; color: #6b7280; margin-left: 6px; }
+    .current-desc { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 10px; }
+    .weather-data { display: flex; flex-direction: column; gap: 12px; }
+    .weather-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+    .weather-item:last-child { border-bottom: none; }
+    .weather-label { font-weight: 700; color: #374151; font-size: 15px; }
+    .weather-value { font-size: 15px; color: #19222e; font-weight: 500; }
+
+    .extended-data { display: flex; flex-direction: column; gap: 20px; }
+    .section-title { font-size: 18px; font-weight: 600; color: #374151; margin-bottom: 12px; text-align: center; }
+    .forecast-days { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .forecast-day { text-align: center; padding: 14px; background: rgba(255,255,255,0.7); border-radius: 10px; }
+    .forecast-day-name { font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .forecast-temp { font-size: 18px; font-weight: 700; color: #1f2937; margin-bottom: 2px; }
+    .forecast-desc { font-size: 12px; color: #6b7280; line-height: 1.3; }
+
+    .chart-container { width: 100%; height: 200px; position: relative; }
+    .chart-canvas { width: 100%; height: 100%; border-radius: 8px; background: rgba(255,255,255,0.85); display:block; }
+
+    .alerts-section { margin-top: 6px; }
+    .alert-item { background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; margin-bottom: 10px; text-align: left; }
+    .alert-item:last-child { margin-bottom: 0; }
+    .alert-title { font-weight: 600; color: #92400e; margin-bottom: 4px; }
+    .alert-desc { color: #a16207; font-size: 14px; }
+    .no-alerts { color: #6b7280; font-style: italic; text-align: center; }
+
+    .refresh-row { display:flex; justify-content:center; align-items:center; gap:12px; margin-top: 8px; }
+    .refresh-btn { background: #03663e; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 14px; cursor: pointer; font-weight: 500; }
+    .refresh-btn:hover { background: #1d4ed8; }
+    .refresh-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .countdown { font-size: 12px; color:#ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.7); font-weight: bold; }
+
+    @media (max-width: 900px) {
+      .main-content { grid-template-columns: 1fr; }
+      .chart-container { height: 180px; }
+      .chart-controls { gap:8px; }
+    }
+    @media (max-width: 560px) {
+      .forecast-days { grid-template-columns: 1fr; }
+      .temperature { font-size: 52px; }
+      .chart-container { height: 160px; }
+    }
+
+    .chart-controls { display:flex; justify-content:space-between; align-items:center; margin: 2px 0 6px 0; flex-wrap: wrap; }
+    .legend { font-size: 12px; color:#374151; display:flex; gap:14px; align-items:center; }
+    .legend .item { display:flex; align-items:center; gap:6px; }
+    .legend .swatch.temp { width:16px; height:0; border-top:2px solid #2563eb; }
+    .legend .swatch.dew { width:16px; height:0; border-top:2px dashed #10b981; }
+    .toggle-group { display:inline-flex; gap:6px; margin-left:auto; }
+    .toggle-btn { background: rgba(255,255,255,0.8); border:1px solid #e5e7eb; padding:4px 10px; border-radius:999px; font-size:12px; cursor:pointer; }
+    .toggle-btn.active { background:#03663e; color:#fff; border-color:#2563eb; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="app-title">Green Valley, Arizona Weather</div>
+      <div class="timestamp" id="timestamp">Loading...</div>
+      <div class="station" id="station"></div>
+    </div>
+
+    <div id="content">
+      <div class="card"><p>Getting your location and weather data...</p></div>
+    </div>
+
+    <div class="refresh-row">
+      <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()">Refresh</button>
+      <span class="countdown" id="countdown">Auto-refresh in: --:--</span>
+    </div>
+
+    <div class="footer" style="text-align:center; margin-top:14px; color:#e5e7eb;">App by Bill M and various AI</div>
+  </div>
+
+<script>
+// ===== Unit helpers
+const convertCtoF = (c) => c == null ? null : Math.round((c * 9/5) + 32);
+const convertKmhToMph = (kmh) => kmh == null ? null : Math.round(kmh * 0.621371);
+const convertPaToInHg = (pa) => pa == null ? null : (pa * 0.0002953).toFixed(2);
+const convertMToMiles = (m) => m == null ? null : (m * 0.000621371).toFixed(1);
+function getWindDirection(deg) {
+  if (deg == null) return null;
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(deg / 22.5) % 16];
+}
+
+// ===== Fixed Location: Green Valley, AZ =====
+const FIXED_LOCATION = { lat: 31.8554, lon: -111.0007 };
+
+// ===== Fetch from NWS
+function parseISODurationToHours(dur) {
+  if (!dur) return 1;
+  const m = dur.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/);
+  if (!m) return 1;
+  const days = parseInt(m[1] || '0', 10);
+  const hours = parseInt(m[2] || '0', 10);
+  const mins = parseInt(m[3] || '0', 10);
+  return days * 24 + hours + Math.round(mins / 60);
+}
+
+async function fetchWeatherData(lat, lon) {
+  const corsProxy = 'https://corsproxy.io/?';
+  const pointsUrl = corsProxy + encodeURIComponent('https://api.weather.gov/points/' + lat + ',' + lon);
+  const pointsResp = await fetch(pointsUrl);
+  const points = await pointsResp.json();
+
+  const office = points.properties.gridId;
+  const gridX = points.properties.gridX;
+  const gridY = points.properties.gridY;
+  const forecastHourlyUrl = points.properties.forecastHourly;
+  const forecastGridDataUrl = points.properties.forecastGridData;
+
+  const stationsUrl = corsProxy + encodeURIComponent('https://api.weather.gov/gridpoints/' + office + '/' + gridX + ',' + gridY + '/stations');
+  const stationsResp = await fetch(stationsUrl);
+  const stations = await stationsResp.json();
+  const stationUrl = stations.features[0].id;
+
+  const currentUrl = corsProxy + encodeURIComponent(stationUrl + '/observations/latest');
+  const currentResp = await fetch(currentUrl);
+  const current = await currentResp.json();
+
+  const hourlyResp = await fetch(corsProxy + encodeURIComponent(forecastHourlyUrl));
+  const hourly = await hourlyResp.json();
+
+  let dewpointByHour = {};
+  try {
+    const gridResp = await fetch(corsProxy + encodeURIComponent(forecastGridDataUrl));
+    const grid = await gridResp.json();
+    const dewVals = grid?.properties?.dewpoint?.values || [];
+    dewVals.forEach(v => {
+      const valid = v.validTime || '';
+      const [startStr, durStr] = valid.split('/');
+      if (!startStr) return;
+      const start = new Date(startStr);
+      const hours = parseISODurationToHours(durStr) || 1;
+      for (let h = 0; h < hours; h++) {
+        const t = new Date(start.getTime() + h * 3600000);
+        const key = t.toISOString().slice(0,13); // YYYY-MM-DDTHH
+        const valF = convertCtoF(v.value);
+        if (valF != null) dewpointByHour[key] = valF;
+      }
+    });
+  } catch (e) { console.warn('Dewpoint grid fetch failed', e); }
+
+  const alertsUrl = corsProxy + encodeURIComponent('https://api.weather.gov/alerts/active?point=' + lat + ',' + lon);
+  const alertsResp = await fetch(alertsUrl);
+  const alerts = await alertsResp.json();
+
+  return {
+    observation: current.properties,
+    station: stations.features[0].properties.name,
+    hourly: hourly?.properties?.periods || [],
+    alerts: alerts?.features || [],
+    dewpointByHour
+  };
+}
+
+// ===== Chart utilities: responsive crisp canvas
+function setupCanvasForDPR(canvas) {
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+function drawSeries(ctx, xs, ys, color, dashed=false, pointRadius=3) {
+  if (!ys.length) return;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  if (dashed) ctx.setLineDash([6,4]);
+
+  ctx.beginPath();
+  let started = false;
+  for (let i = 0; i < ys.length; i++) {
+    const y = ys[i];
+    const x = xs[i];
+    if (y == null) { started = false; continue; }
+    if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+  }
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+  ctx.fillStyle = color;
+  for (let i = 0; i < ys.length; i++) {
+    if (ys[i] == null) continue;
+    ctx.beginPath(); ctx.arc(xs[i], ys[i], pointRadius, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function createTemperatureChart(hourly, dewpointByHour, mode) {
+  const canvas = document.getElementById('tempChart');
+  if (!canvas || !hourly || !hourly.length) return;
+  const ctx = setupCanvasForDPR(canvas);
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  ctx.clearRect(0, 0, width, height);
+
+  const next36 = hourly.slice(0, 36);
+  const temps = next36.map(p => p.temperature);
+  const timeHours = next36.map(p => new Date(p.startTime).getHours());
+
+  const dewSeries = next36.map(p => {
+    const key = new Date(p.startTime).toISOString().slice(0,13);
+    const v = dewpointByHour ? dewpointByHour[key] : null;
+    return (v==null || Number.isNaN(v)) ? null : v;
+  });
+
+  const seriesForRange = (() => {
+    if (mode === 'dew') return dewSeries.filter(v => v != null);
+    if (mode === 'temp') return temps;
+    return temps.concat(dewSeries.filter(v => v != null));
+  })();
+
+  let minT = Math.min(...seriesForRange);
+  let maxT = Math.max(...seriesForRange);
+  if (!isFinite(minT) || !isFinite(maxT)) { minT = Math.min(...temps); maxT = Math.max(...temps); }
+  const range = (maxT - minT) || 10;
+
+  const padLeft = 40, padRight = 20, padTop = 20, padBottom = 28;
+  const cw = width - padLeft - padRight, ch = height - padTop - padBottom;
+
+  ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = 1;
+  for (let i=0;i<=4;i++){ const y = padTop + ch*i/4; ctx.beginPath(); ctx.moveTo(padLeft,y); ctx.lineTo(width-padRight,y); ctx.stroke(); }
+
+  const xs = temps.map((_, i) => padLeft + cw*i/(temps.length-1));
+  const yFor = (val) => padTop + ch - ((val - minT) / range * ch);
+
+  if (mode !== 'dew') drawSeries(ctx, xs, temps.map(yFor), '#2563eb', false, 3);
+  if (mode !== 'temp') drawSeries(ctx, xs, dewSeries.map(v => v==null?null:yFor(v)), '#10b981', true, 2);
+
+  const primary = (mode === 'dew') ? dewSeries : temps;
+  ctx.font='12px sans-serif'; ctx.textAlign='center';
+  for (let i = 0; i < temps.length; i++) {
+    if (i % 4 === 0) {
+      const x = xs[i];
+      const yVal = primary[i];
+      const y = yVal == null ? null : yFor(yVal);
+      if (y != null) { ctx.fillStyle = '#374151'; ctx.fillText((yVal ?? '') + (yVal!=null ? '°' : ''), x, y - 8); }
+      ctx.fillStyle = '#6b7280'; ctx.font='10px sans-serif';
+      const hr = timeHours[i];
+      const label = hr===0?'12AM':(hr<12?hr+'AM':(hr===12?'12PM':(hr-12)+'PM'));
+      ctx.fillText(label, x, height-6);
+      ctx.font='12px sans-serif';
+    }
+  }
+}
+
+// ===== Forecast UI + display
+function displayWeather(data) {
+  const obs = data.observation;
+  const station = data.station;
+  const hourly = data.hourly || [];
+  const alerts = data.alerts || [];
+  const dewpointMap = data.dewpointByHour || {};
+
+  const obsTime = new Date(obs.timestamp);
+  document.getElementById('timestamp').textContent = 'As of ' + obsTime.toLocaleString();
+  document.getElementById('station').textContent = 'Station: ' + station;
+
+  const tempF = convertCtoF(obs.temperature.value);
+  const dewpointF = convertCtoF(obs.dewpoint.value);
+  const windMph = convertKmhToMph(obs.windSpeed.value);
+  const windDir = getWindDirection(obs.windDirection.value);
+  const pressureInHg = convertPaToInHg(obs.barometricPressure.value);
+  const visMiles = convertMToMiles(obs.visibility.value);
+  const humidity = obs.relativeHumidity.value ? Math.round(obs.relativeHumidity.value) : null;
+
+  const now = new Date();
+  const hr = now.getHours();
+  const labels = hr < 15 ? ['Today','Tonight','Tomorrow'] : ['Tonight','Tomorrow','Tomorrow Night'];
+
+  function atHour(d, h){ const x=new Date(d); x.setHours(h,0,0,0); return x; }
+  const today6pm = atHour(now,18);
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate()+1);
+  const tomorrow6am = atHour(tomorrow,6);
+  const tomorrow6pm = atHour(tomorrow,18);
+  const dayAfter = new Date(now); dayAfter.setDate(now.getDate()+2);
+  const dayAfter6am = atHour(dayAfter,6);
+
+  function getWindow(label){
+    if(label==='Today') return { start: now, end: today6pm, type:'day' };
+    if(label==='Tonight') return { start: now>today6pm? now : today6pm, end: tomorrow6am, type:'night' };
+    if(label==='Tomorrow') return { start: tomorrow6am, end: tomorrow6pm, type:'day' };
+    if(label==='Tomorrow Night') return { start: tomorrow6pm, end: dayAfter6am, type:'night' };
+  }
+  function aggregateWindow(label){
+    const win = getWindow(label);
+    const periods = hourly.filter(p => {
+      const t = new Date(p.startTime);
+      return t >= win.start && t < win.end;
+    });
+    if(!periods.length) return null;
+    const temps = periods.map(p=>p.temperature);
+    const value = (win.type==='day') ? Math.max(...temps) : Math.min(...temps);
+    const desc = periods[0]?.shortForecast || '';
+    return { hl: win.type==='day'?'High':'Low', value, desc };
+  }
+
+  let forecastHtml = '<div class="forecast-days">';
+  labels.forEach(lbl => {
+    const agg = aggregateWindow(lbl);
+    if(agg){
+      forecastHtml += '<div class="forecast-day">'
+        + '<div class="forecast-day-name">'+lbl+'</div>'
+        + '<div class="forecast-temp">'+agg.hl+' '+agg.value+'°F</div>'
+        + '<div class="forecast-desc">'+agg.desc+'</div>'
+        + '</div>';
+    } else {
+      forecastHtml += '<div class="forecast-day"><div class="forecast-day-name">'+lbl+'</div><div class="forecast-desc">Forecast unavailable</div></div>';
+    }
+  });
+  forecastHtml += '</div>';
+
+  let alertsHtml = '';
+  if(alerts.length){
+    alerts.slice(0,3).forEach(a => {
+      alertsHtml += '<div class="alert-item">'
+        + '<div class="alert-title">'+a.properties.event+'</div>'
+        + '<div class="alert-desc">'+a.properties.headline+'</div>'
+        + '</div>';
+    });
+  } else {
+    alertsHtml = '<div class="no-alerts">No active alerts</div>';
+  }
+
+  const currentDesc = obs.textDescription || (hourly[0] ? hourly[0].shortForecast : '');
+  const defaultChartMode = (window.innerWidth <= 900) ? 'temp' : 'both';
+
+  const html = `
+    <div class="main-content">
+      <div class="current-card card">
+        <div class="temp-main">
+          <span class="temperature">${tempF ?? 'N/A'}</span><span class="temp-unit">°F</span>
+        </div>
+        <div class="current-desc">${currentDesc || ''}</div>
+        <div class="weather-data">
+          <div class="weather-item"><span class="weather-label">Dewpoint</span><span class="weather-value">${dewpointF!=null?dewpointF+'°F':'N/A'}</span></div>
+          <div class="weather-item"><span class="weather-label">Humidity</span><span class="weather-value">${humidity!=null?humidity+'%':'N/A'}</span></div>
+          <div class="weather-item"><span class="weather-label">Wind Speed</span><span class="weather-value">${windMph!=null?windMph+' mph '+(windDir||''): 'N/A'}</span></div>
+          <div class="weather-item"><span class="weather-label">Barometer</span><span class="weather-value">${pressureInHg!=null?pressureInHg+' in':'N/A'}</span></div>
+          <div class="weather-item"><span class="weather-label">Visibility</span><span class="weather-value">${visMiles!=null?visMiles+' miles':'N/A'}</span></div>
+        </div>
+      </div>
+
+      <div class="extended-data">
+        <div class="card">
+          <div class="section-title">Local Forecast</div>
+          ${forecastHtml}
+        </div>
+        <div class="card">
+          <div class="section-title">36-Hour Temperature and Dewpoint Trend</div>
+          <div class="chart-controls">
+            <div class="legend">
+              <span class="item"><span class="swatch temp"></span>Temp</span>
+              <span class="item"><span class="swatch dew"></span>Dewpoint</span>
+            </div>
+            <div class="toggle-group" id="chartToggles">
+              <button class="toggle-btn" data-mode="temp">Temp</button>
+              <button class="toggle-btn" data-mode="dew">Dewpoint</button>
+              <button class="toggle-btn" data-mode="both">Both</button>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="tempChart" class="chart-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alerts-section card">
+      <div class="section-title">Weather Alerts</div>
+      ${alertsHtml}
+    </div>`;
+
+  document.getElementById('content').innerHTML = html;
+
+  const toggleGroup = document.getElementById('chartToggles');
+  let currentMode = defaultChartMode;
+  function updateActiveButtons() {
+    Array.from(toggleGroup.querySelectorAll('.toggle-btn')).forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === currentMode);
+    });
+  }
+  toggleGroup.addEventListener('click', (e) => {
+    const btn = e.target.closest('.toggle-btn');
+    if (!btn) return;
+    currentMode = btn.dataset.mode;
+    updateActiveButtons();
+    createTemperatureChart(hourly, dewpointMap, currentMode);
+  });
+  updateActiveButtons();
+
+  setTimeout(() => createTemperatureChart(hourly, dewpointMap, currentMode), 60);
+  window.addEventListener('resize', () => createTemperatureChart(hourly, dewpointMap, currentMode), { passive: true });
+}
+
+// ===== Auto-refresh + countdown (15 minutes) — call manualRefresh at 0
+const AUTO_REFRESH_MS = 15 * 60 * 1000;
+let countdownInterval = null;
+
+function startCountdown(msRemaining) {
+  const el = document.getElementById('countdown');
+  if (countdownInterval) clearInterval(countdownInterval);
+  let fired = false;
+
+  function update() {
+    msRemaining -= 1000;
+    if (msRemaining < 0) msRemaining = 0;
+    const m = Math.floor(msRemaining / 60000);
+    const s = Math.floor((msRemaining % 60000) / 1000);
+    el.textContent = 'Auto-refresh in: ' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    if (msRemaining <= 0 && !fired) {
+      fired = true;
+      clearInterval(countdownInterval);
+      manualRefresh();
+    }
+  }
+  const m0 = Math.floor(msRemaining / 60000);
+  const s0 = Math.floor((msRemaining % 60000) / 1000);
+  el.textContent = 'Auto-refresh in: ' + String(m0).padStart(2,'0') + ':' + String(s0).padStart(2,'0');
+  countdownInterval = setInterval(update, 1000);
+}
+
+function scheduleAutoRefresh() { startCountdown(AUTO_REFRESH_MS); }
+
+async function manualRefresh() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  try {
+    // Use fixed location
+    const loc = FIXED_LOCATION;
+    const data = await fetchWeatherData(loc.lat, loc.lon);
+    displayWeather(data);
+  } finally {
+    btn.disabled = false;
+    scheduleAutoRefresh();
+  }
+}
+
+// ===== Load (first load uses fixed location)
+async function loadWeatherData(){
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true; btn.textContent = 'Loading...';
+  try{
+    const loc = FIXED_LOCATION;
+    const data = await fetchWeatherData(loc.lat, loc.lon);
+    displayWeather(data);
+  }catch(e){
+    console.error(e);
+    document.getElementById('content').innerHTML = '<div class="alerts-section card"><div class="section-title">Error</div><div class="no-alerts">Failed to load weather data.</div></div>';
+  }finally{
+    btn.disabled = false; btn.textContent = 'Refresh';
+  }
+}
+
+loadWeatherData().then(() => scheduleAutoRefresh());
+</script>
+</body>
+</html>
